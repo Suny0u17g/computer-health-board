@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>电脑健康看板</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' fill='%23070b14'/%3E%3Cpath d='M4 12h3l2-6 4 12 2-6h5' stroke='%233ee0d4' stroke-width='1.8' fill='none'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #070b14;
+      --ink: #e8eef8;
+      --muted: #8ea0b8;
+      --faint: #5b6d86;
+      --line: rgba(148, 197, 255, 0.12);
+      --amber: #f5a524;
+      --amber-dim: rgba(245, 165, 36, 0.16);
+      --cyan: #3ee0d4;
+      --cyan-dim: rgba(62, 224, 212, 0.14);
+      --lime: #7dffb3;
+      --rose: #ff5d73;
+      --ok: #3ee0d4;
+      --warn: #f5a524;
+      --bad: #ff5d73;
+      --radius: 14px;
+      --font-hud: "Share Tech Mono", ui-monospace, monospace;
+      --font-data: "Fira Code", ui-monospace, monospace;
+      --shadow: 0 18px 50px rgba(0, 0, 0, 0.38);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: var(--font-data);
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 600px at 8% -10%, rgba(62, 224, 212, 0.08), transparent 55%),
+        radial-gradient(900px 500px at 110% 0%, rgba(245, 165, 36, 0.08), transparent 50%),
+        linear-gradient(180deg, #0a101c 0%, var(--bg) 40%, #05080f 100%);
+      min-height: 100dvh;
+    }
+
+    body::before {
+      content: "";
+      pointer-events: none;
+      position: fixed;
+      inset: 0;
+      background:
+        linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px) 0 0 / 28px 28px,
+        linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px) 0 0 / 28px 28px;
+      mask-image: radial-gradient(ellipse at center, #000 40%, transparent 85%);
+      z-index: 0;
+    }
+
+    .wrap {
+      position: relative;
+      z-index: 2;
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 22px 22px 40px;
+    }
+
+    header.top {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 16px;
+      padding: 14px 18px;
+      background: linear-gradient(180deg, rgba(16,24,42,0.92), rgba(12,18,32,0.78));
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+    }
+
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .mark {
+      width: 42px; height: 42px;
+      border: 1px solid rgba(62, 224, 212, 0.45);
+      display: grid; place-items: center;
+      position: relative;
+      background: rgba(62, 224, 212, 0.06);
+    }
+    .mark::before, .mark::after {
+      content: "";
+      position: absolute;
+      width: 8px; height: 8px;
+      border: 1.5px solid var(--amber);
+    }
+    .mark::before { top: -2px; left: -2px; border-right: 0; border-bottom: 0; }
+    .mark::after { bottom: -2px; right: -2px; border-left: 0; border-top: 0; }
+    .brand h1 {
+      margin: 0;
+      font-family: var(--font-hud);
+      font-size: 22px;
+      letter-spacing: 0.18em;
+      font-weight: 400;
+    }
+    .brand p {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .live {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      justify-content: center;
+      font-family: var(--font-hud);
+      letter-spacing: 0.18em;
+      color: var(--cyan);
+      font-size: 13px;
+    }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--cyan);
+      box-shadow: 0 0 12px var(--cyan);
+      animation: pulse 1.6s ease-out infinite;
+    }
+    .dot.off { background: var(--rose); box-shadow: 0 0 12px var(--rose); animation: none; }
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 1; }
+      70% { transform: scale(1.8); opacity: 0; }
+      100% { opacity: 0; }
+    }
+
+    .clock-box { text-align: right; }
+    .clock { font-family: var(--font-hud); font-size: 22px; letter-spacing: 0.12em; }
+    .clock-sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+    .verdict {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 18px;
+      margin-bottom: 16px;
+      padding: 18px 20px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(18, 28, 48, 0.95), rgba(10, 16, 28, 0.9));
+      box-shadow: var(--shadow);
+    }
+    .verdict.ok { border-color: rgba(62, 224, 212, 0.35); }
+    .verdict.warn { border-color: rgba(245, 165, 36, 0.45); }
+    .verdict.bad { border-color: rgba(255, 93, 115, 0.5); }
+    .verdict-score {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 8px;
+      padding-right: 8px;
+      border-right: 1px solid var(--line);
+    }
+    .verdict-score .label {
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.12em;
+    }
+    .verdict-score strong {
+      font-family: var(--font-hud);
+      font-size: 28px;
+      letter-spacing: 0.08em;
+      line-height: 1.2;
+    }
+    .verdict-score p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .findings { display: grid; gap: 8px; }
+    .finding {
+      display: grid;
+      grid-template-columns: 72px 1fr;
+      gap: 10px;
+      align-items: start;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.04);
+    }
+    .finding b { font-size: 12px; letter-spacing: 0.04em; }
+    .finding span { color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .finding.ok b { color: var(--ok); }
+    .finding.warn b { color: var(--warn); }
+    .finding.bad b { color: var(--bad); }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .chip {
+      border: 1px solid var(--line);
+      background: rgba(16, 24, 42, 0.7);
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      color: var(--muted);
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .chip b { color: var(--ink); font-weight: 500; }
+
+    .gauges {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .card {
+      position: relative;
+      background: linear-gradient(180deg, rgba(18, 28, 48, 0.92), rgba(10, 16, 28, 0.88));
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px 18px 18px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .card.alert { border-color: rgba(255, 93, 115, 0.4); }
+    .card.caution { border-color: rgba(245, 165, 36, 0.35); }
+
+    .card-h {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      gap: 8px;
+    }
+    .card-h h2 {
+      margin: 0;
+      font-size: 15px;
+      letter-spacing: 0.04em;
+      font-weight: 500;
+    }
+    .card-h .sub { color: var(--faint); font-size: 11px; }
+
+    .pill {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid;
+      white-space: nowrap;
+    }
+    .pill.ok { color: var(--ok); border-color: rgba(62,224,212,0.35); background: rgba(62,224,212,0.08); }
+    .pill.warn { color: var(--warn); border-color: rgba(245,165,36,0.4); background: rgba(245,165,36,0.1); }
+    .pill.bad { color: var(--bad); border-color: rgba(255,93,115,0.4); background: rgba(255,93,115,0.1); }
+
+    .hint {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .hint strong { color: var(--ink); font-weight: 500; }
+
+    .gauge-row {
+      display: grid;
+      grid-template-columns: 150px 1fr;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .gauge { width: 150px; height: 150px; position: relative; }
+    .gauge svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+    .gauge .track { fill: none; stroke: rgba(255,255,255,0.06); stroke-width: 9; }
+    .gauge .bar {
+      fill: none;
+      stroke-width: 9;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 400ms ease, stroke 250ms ease;
+    }
+    .gauge .num {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      text-align: center;
+    }
+    .gauge .num strong {
+      font-family: var(--font-hud);
+      font-size: 28px;
+      letter-spacing: 0.04em;
+      display: block;
+    }
+    .gauge .num em {
+      font-style: normal;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .meta { display: grid; gap: 8px; font-size: 12px; color: var(--muted); }
+    .meta div {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px dashed rgba(255,255,255,0.06);
+      padding-bottom: 6px;
+    }
+    .meta b { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .grid-2b {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .cores { display: grid; gap: 7px; }
+    .core {
+      display: grid;
+      grid-template-columns: 52px 1fr 48px;
+      gap: 8px;
+      align-items: center;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .bar-track {
+      height: 8px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 99px;
+      background: linear-gradient(90deg, var(--cyan), var(--amber));
+      transition: width 350ms ease, background 250ms ease;
+    }
+    .core b { text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+    canvas.spark {
+      width: 100%;
+      height: 120px;
+      display: block;
+      background: linear-gradient(180deg, rgba(62,224,212,0.04), transparent);
+      border: 1px solid rgba(62,224,212,0.12);
+      border-radius: 10px;
+    }
+
+    .net-stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .stat {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+    .stat small {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      margin-bottom: 4px;
+    }
+    .stat b {
+      font-size: 16px;
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+    }
+    .up { color: var(--amber); }
+    .down { color: var(--cyan); }
+
+    .vol { display: grid; gap: 6px; margin-bottom: 14px; }
+    .vol-h {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--muted);
+      gap: 8px;
+    }
+    .vol-h b { color: var(--ink); }
+    .vol-track {
+      height: 10px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .vol-fill {
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, #3ee0d4, #f5a524 70%, #ff5d73);
+      transition: width 400ms ease;
+    }
+    .vol.caution .vol-h b { color: var(--warn); }
+    .vol.alert .vol-h b { color: var(--bad); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th {
+      text-align: left;
+      color: var(--faint);
+      font-weight: 400;
+      font-size: 11px;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--line);
+    }
+    td {
+      padding: 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      font-variant-numeric: tabular-nums;
+      vertical-align: top;
+    }
+    td.name { max-width: 220px; }
+    td.name .alias { color: var(--ink); display: block; }
+    td.name .raw { color: var(--faint); font-size: 11px; }
+    tr.hot td { color: var(--warn); }
+
+    .ifaces { display: grid; gap: 8px; margin-top: 12px; }
+    .iface {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--muted);
+      padding: 8px 10px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 8px;
+    }
+    .iface b { color: var(--ink); font-weight: 500; }
+    .up-pill, .down-pill {
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 99px;
+      border: 1px solid;
+      white-space: nowrap;
+    }
+    .up-pill { color: var(--lime); border-color: rgba(125,255,179,0.35); }
+    .down-pill { color: var(--rose); border-color: rgba(255,93,115,0.35); }
+
+    .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    button {
+      cursor: pointer;
+      background: transparent;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 14px;
+      font-size: 12px;
+      min-height: 36px;
+      transition: background 180ms ease, border-color 180ms ease, color 180ms ease;
+    }
+    button:hover, button:focus-visible {
+      background: var(--amber-dim);
+      border-color: var(--amber);
+      color: var(--amber);
+      outline: none;
+    }
+    button.active {
+      background: var(--cyan-dim);
+      border-color: var(--cyan);
+      color: var(--cyan);
+    }
+
+    .err {
+      display: none;
+      margin-bottom: 14px;
+      padding: 12px 14px;
+      border: 1px solid rgba(255,93,115,0.4);
+      background: rgba(255,93,115,0.08);
+      color: #ffc1c9;
+      border-radius: 10px;
+      font-size: 13px;
+    }
+    .err.show { display: block; }
+
+    footer {
+      margin-top: 18px;
+      color: var(--faint);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    @media (max-width: 1024px) {
+      header.top, .verdict { grid-template-columns: 1fr; }
+      .verdict-score { border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 12px; }
+      .clock-box { text-align: left; }
+      .gauges, .grid-2, .grid-2b, .net-stats { grid-template-columns: 1fr; }
+      .gauge-row { grid-template-columns: 130px 1fr; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <div class="brand">
+        <div class="mark" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path d="M4 12h3l2-6 4 12 2-6h5" stroke="#3ee0d4" stroke-width="1.8"/>
+          </svg>
+        </div>
+        <div>
+          <h1>电脑健康看板</h1>
+          <p id="hostname">正在读取这台电脑的状态…</p>
+        </div>
+      </div>
+      <div class="live" id="liveStatus">
+        <span class="dot" id="liveDot"></span>
+        <span id="liveText">连接中</span>
+      </div>
+      <div class="clock-box">
+        <div class="clock" id="clock">--:--:--</div>
+        <div class="clock-sub" id="dateLine">—</div>
+      </div>
+    </header>
+
+    <div class="err" id="errBox" role="alert"></div>
+
+    <section class="verdict ok" id="verdict" aria-live="polite">
+      <div class="verdict-score">
+        <div class="label">现在这台电脑</div>
+        <strong id="verdictTitle">正在判断…</strong>
+        <p id="verdictSummary">先看这里：我会用大白话告诉你电脑忙不忙、有没有问题。</p>
+      </div>
+      <div class="findings" id="findings"></div>
+    </section>
+
+    <div class="chips" id="chips"></div>
+
+    <section class="gauges">
+      <article class="card" id="cpuCard">
+        <div class="card-h">
+          <h2>处理器忙不忙</h2>
+          <span class="pill ok" id="cpuPill">正常</span>
+        </div>
+        <div class="gauge-row">
+          <div class="gauge" id="cpuGauge"></div>
+          <div class="meta" id="cpuMeta"></div>
+        </div>
+        <p class="hint" id="cpuHint">处理器就像电脑的大脑。数字越低越轻松，越高越容易发热、卡顿。</p>
+      </article>
+      <article class="card" id="memCard">
+        <div class="card-h">
+          <h2>内存够不够</h2>
+          <span class="pill ok" id="memPill">正常</span>
+        </div>
+        <div class="gauge-row">
+          <div class="gauge" id="memGauge"></div>
+          <div class="meta" id="memMeta"></div>
+        </div>
+        <p class="hint" id="memHint">内存是正在干活的临时桌面。占满了，开新软件就会变慢。</p>
+      </article>
+      <article class="card" id="diskCard">
+        <div class="card-h">
+          <h2>硬盘还剩多少</h2>
+          <span class="pill ok" id="diskPill">正常</span>
+        </div>
+        <div class="gauge-row">
+          <div class="gauge" id="diskGauge"></div>
+          <div class="meta" id="diskMeta"></div>
+        </div>
+        <p class="hint" id="diskHint">硬盘是长期仓库。系统盘太满时，更新、开机都会变慢。</p>
+      </article>
+    </section>
+
+    <section class="grid-2">
+      <article class="card">
+        <div class="card-h">
+          <h2>每个核心在干什么</h2>
+          <span class="sub" id="coreNote">20 个逻辑核心</span>
+        </div>
+        <p class="hint">电脑有很多个“小工人”同时干活。个别核心很忙、其他很闲，通常是正常的。</p>
+        <div class="cores" id="cores"></div>
+      </article>
+      <article class="card">
+        <div class="card-h">
+          <h2>处理器忙碌趋势</h2>
+          <div class="toolbar">
+            <button type="button" id="pauseBtn" aria-pressed="false">暂停刷新</button>
+            <button type="button" data-interval="1000">1秒</button>
+            <button type="button" class="active" data-interval="2000">2秒</button>
+            <button type="button" data-interval="5000">5秒</button>
+          </div>
+        </div>
+        <p class="hint">线往上走 = 电脑突然变忙。如果长时间顶在高位，说明有程序一直在吃处理器。</p>
+        <canvas class="spark" id="cpuSpark" width="640" height="120" aria-label="处理器占用趋势"></canvas>
+      </article>
+    </section>
+
+    <section class="card" id="netCard" style="margin-bottom:16px">
+      <div class="card-h">
+        <h2>网络在传什么</h2>
+        <span class="pill ok" id="netPill">正常</span>
+      </div>
+      <p class="hint" id="netHint">下载是别人发给你的数据，上传是你发给别人的数据。数字突然很大，可能在下东西、同步或更新。</p>
+      <canvas class="spark" id="netSpark" width="1200" height="120" aria-label="网络速率趋势"></canvas>
+      <div class="net-stats">
+        <div class="stat"><small>正在下载</small><b class="down" id="recvRate">—</b></div>
+        <div class="stat"><small>正在上传</small><b class="up" id="sentRate">—</b></div>
+        <div class="stat"><small>开机以来已下载</small><b id="recvTotal">—</b></div>
+        <div class="stat"><small>开机以来已上传</small><b id="sentTotal">—</b></div>
+      </div>
+      <div class="ifaces" id="ifaces"></div>
+    </section>
+
+    <section class="grid-2b">
+      <article class="card">
+        <div class="card-h">
+          <h2>各硬盘分区</h2>
+          <span class="sub" id="diskIo">读写 —</span>
+        </div>
+        <p class="hint">C 盘一般是系统盘，建议至少留 15% 或 20GB 空闲。D 盘更像资料仓库。</p>
+        <div id="volumes"></div>
+      </article>
+      <article class="card">
+        <div class="card-h">
+          <h2>谁最占内存</h2>
+          <span class="sub" id="procCount">—</span>
+        </div>
+        <p class="hint">这是当前最占内存的 10 个程序。名字后面有中文说明。标黄的表示比较吃资源。</p>
+        <table>
+          <thead>
+            <tr>
+              <th>编号</th>
+              <th>程序</th>
+              <th>处理器</th>
+              <th>内存</th>
+              <th>占用大小</th>
+            </tr>
+          </thead>
+          <tbody id="procs"></tbody>
+        </table>
+      </article>
+    </section>
+
+    <footer>数据只在这台电脑上显示，不会上传。双击「启动监控.bat」即可打开。</footer>
+  </div>
+
+  <script>
+    const CIRC = 2 * Math.PI * 52;
+    const MAX_POINTS = 60;
+    const cpuHist = [];
+    const downHist = [];
+    const upHist = [];
+
+    let paused = false;
+    let timer = null;
+    let interval = 2000;
+    let inflight = null;
+
+    const SYSTEM_PROCS = new Set([
+      "MemCompression", "MsMpEng.exe", "NisSrv.exe", "explorer.exe", "dwm.exe",
+      "System", "Registry", "Idle", "csrss.exe", "winlogon.exe", "services.exe",
+      "svchost.exe", "SearchHost.exe", "SearchIndexer.exe", "RuntimeBroker.exe",
+      "TextInputHost.exe", "SecurityHealthService.exe", "System Idle Process",
+    ]);
+
+    const PROC_ALIAS = {
+      "MemCompression": "系统内存压缩（帮你腾内存，一般不用管）",
+      "MsMpEng.exe": "Windows 安全中心 / 杀毒",
+      "NisSrv.exe": "Windows 网络安全服务",
+      "explorer.exe": "桌面和文件资源管理器",
+      "dwm.exe": "桌面窗口管理（系统显示）",
+      "System": "Windows 系统内核",
+      "Registry": "系统注册表",
+      "Idle": "系统空闲",
+      "csrss.exe": "Windows 系统进程",
+      "winlogon.exe": "Windows 登录进程",
+      "services.exe": "Windows 服务总管",
+      "svchost.exe": "Windows 后台服务",
+      "SearchHost.exe": "Windows 搜索",
+      "SearchIndexer.exe": "Windows 搜索索引",
+      "StartMenuExperienceHost.exe": "开始菜单",
+      "ShellExperienceHost.exe": "系统界面组件",
+      "RuntimeBroker.exe": "应用权限管家",
+      "TextInputHost.exe": "输入法 / 触摸键盘",
+      "PhoneExperienceHost.exe": "手机连接 / 你的手机",
+      "YourPhone.exe": "手机连接",
+      "msedge.exe": "Microsoft Edge 浏览器",
+      "chrome.exe": "Google Chrome 浏览器",
+      "firefox.exe": "Firefox 浏览器",
+      "Code.exe": "VS Code 编辑器",
+      "Cursor.exe": "Cursor 编辑器",
+      "Snow App.exe": "Snow App",
+      "WeChat.exe": "微信",
+      "Weixin.exe": "微信",
+      "QQ.exe": "QQ",
+      "DingTalk.exe": "钉钉",
+      "cloudmusic.exe": "网易云音乐",
+      "Spotify.exe": "Spotify",
+      "steam.exe": "Steam",
+      "Discord.exe": "Discord",
+      "Telegram.exe": "Telegram",
+      "powershell.exe": "PowerShell 命令行",
+      "WindowsTerminal.exe": "Windows 终端",
+      "cmd.exe": "命令提示符",
+      "python.exe": "Python 程序",
+      "node.exe": "Node.js 程序",
+      "MSPCManagerService.exe": "小米电脑管家",
+      "MiDrive.exe": "小米云盘",
+      "OneDrive.exe": "OneDrive 云盘",
+      "Dropbox.exe": "Dropbox",
+      "NVIDIA Overlay.exe": "NVIDIA 游戏叠加层",
+      "nvcontainer.exe": "NVIDIA 显卡服务",
+      "SecurityHealthService.exe": "Windows 安全健康服务",
+      "widgetservice.exe": "Windows 小组件",
+      "Widgets.exe": "Windows 小组件",
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    function levelOf(p, warnAt, badAt) {
+      if (p >= badAt) return "bad";
+      if (p >= warnAt) return "warn";
+      return "ok";
+    }
+
+    function tone(level) {
+      if (level === "bad") return "var(--bad)";
+      if (level === "warn") return "var(--warn)";
+      return "var(--ok)";
+    }
+
+    function pillText(level) {
+      if (level === "bad") return "需要处理";
+      if (level === "warn") return "需要留意";
+      return "正常";
+    }
+
+    function setPill(el, level) {
+      el.className = "pill " + level;
+      el.textContent = pillText(level);
+    }
+
+    function setCardLevel(el, level) {
+      el.classList.remove("alert", "caution");
+      if (level === "bad") el.classList.add("alert");
+      if (level === "warn") el.classList.add("caution");
+    }
+
+    function worst(levels) {
+      if (levels.includes("bad")) return "bad";
+      if (levels.includes("warn")) return "warn";
+      return "ok";
+    }
+
+    function renderGauge(el, percent, label, level) {
+      const p = Math.max(0, Math.min(100, Number(percent) || 0));
+      el.innerHTML = `
+        <svg viewBox="0 0 120 120" aria-hidden="true">
+          <circle class="track" cx="60" cy="60" r="52"></circle>
+          <circle class="bar" cx="60" cy="60" r="52"
+            stroke="${tone(level)}"
+            stroke-dasharray="${CIRC}"
+            stroke-dashoffset="${CIRC - (p / 100) * CIRC}"></circle>
+        </svg>
+        <div class="num">
+          <div>
+            <strong>${p.toFixed(1)}%</strong>
+            <em>${label}</em>
+          </div>
+        </div>`;
+    }
+
+    function drawSpark(canvas, series, colors) {
+      const ctx = canvas.getContext("2d");
+      const dpr = window.devicePixelRatio || 1;
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+
+      ctx.strokeStyle = "rgba(255,255,255,0.05)";
+      ctx.lineWidth = 1;
+      for (let i = 1; i < 4; i++) {
+        const y = (h / 4) * i;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+
+      const max = Math.max(1, ...series.flat());
+      series.forEach((arr, idx) => {
+        if (arr.length < 2) return;
+        ctx.beginPath();
+        arr.forEach((v, i) => {
+          const x = (i / (MAX_POINTS - 1)) * w;
+          const y = h - (v / max) * (h - 8) - 4;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.strokeStyle = colors[idx];
+        ctx.lineWidth = 1.8;
+        ctx.stroke();
+      });
+    }
+
+    function push(arr, v) {
+      arr.push(v);
+      if (arr.length > MAX_POINTS) arr.shift();
+    }
+
+    function setClock() {
+      const d = new Date();
+      $("clock").textContent = d.toLocaleTimeString("zh-CN", { hour12: false });
+      $("dateLine").textContent = d.toLocaleDateString("zh-CN", {
+        weekday: "long", year: "numeric", month: "2-digit", day: "2-digit"
+      });
+    }
+
+    function chip(label, value) {
+      return `<span class="chip">${label}<b>${value}</b></span>`;
+    }
+
+    function aliasOf(name) {
+      return PROC_ALIAS[name] || "正在运行的程序";
+    }
+
+    function ifaceLabel(name) {
+      if (/wlan|wi-?fi|无线/i.test(name)) return "无线网 Wi-Fi";
+      if (/ethernet|以太网/i.test(name)) return "有线网";
+      if (/loopback/i.test(name)) return "本机回环（系统内部，可忽略）";
+      if (/蓝牙|bluetooth/i.test(name)) return "蓝牙网络（一般不用）";
+      if (/本地连接\*/.test(name)) return "虚拟网卡（可忽略）";
+      return name;
+    }
+
+    function diagnose(data) {
+      const cpu = data.cpu.percent;
+      const mem = data.memory.percent;
+      const swap = data.memory.swap_percent;
+      const volumes = data.disk.volumes || [];
+      const cDrive = volumes.find((v) => /^[Cc]:\\?$/.test(v.mount)) || volumes[0];
+      const fullVols = volumes.filter((v) => v.percent >= 90);
+      const tightVols = volumes.filter((v) => v.percent >= 80 && v.percent < 90);
+      const liveIfaces = (data.network.interfaces || []).filter((n) => n.isup && !/loopback/i.test(n.name));
+      const userProcs = (data.processes.top || []).filter((p) => !SYSTEM_PROCS.has(p.name));
+      const hotProc = userProcs.find((p) => p.cpu >= 25 || p.mem >= 18);
+      const busyProc = userProcs.find((p) => p.cpu >= 12 || p.mem >= 10);
+      const recv = data.network.recv_rate || 0;
+      const sent = data.network.sent_rate || 0;
+      const busyNet = recv + sent > 2 * 1024 * 1024;
+
+      const cpuLv = levelOf(cpu, 55, 85);
+      const memLv = mem >= 90 || swap >= 40 ? "bad" : mem >= 75 || swap >= 20 ? "warn" : "ok";
+      const diskLv = fullVols.length ? "bad" : tightVols.length || (cDrive && cDrive.percent >= 80) ? "warn" : "ok";
+      const netLv = liveIfaces.length === 0 ? "bad" : busyNet ? "warn" : "ok";
+      const bat = data.battery;
+      const batLv = bat && !bat.plugged && bat.percent <= 15 ? "bad" : bat && !bat.plugged && bat.percent <= 25 ? "warn" : "ok";
+
+      const findings = [];
+
+      if (cpuLv === "ok") {
+        findings.push({ level: "ok", title: "处理器", text: `现在只用了 ${cpu.toFixed(0)}%，很轻松，可以正常办公、上网、看视频。` });
+      } else if (cpuLv === "warn") {
+        findings.push({ level: "warn", title: "处理器", text: `已经用到 ${cpu.toFixed(0)}%，电脑会开始发热、风扇变响。先别开太多大软件。` });
+      } else {
+        findings.push({ level: "bad", title: "处理器", text: `已经用到 ${cpu.toFixed(0)}%，很容易卡顿。建议关掉暂时不用的软件。` });
+      }
+
+      if (memLv === "ok") {
+        findings.push({ level: "ok", title: "内存", text: `已用 ${mem.toFixed(0)}%（${data.memory.used_h} / ${data.memory.total_h}），还够用。` });
+      } else if (memLv === "warn") {
+        findings.push({ level: "warn", title: "内存", text: `已用 ${mem.toFixed(0)}%，再开新软件可能变慢。可以关掉浏览器多余标签页。` });
+      } else {
+        findings.push({ level: "bad", title: "内存", text: `内存几乎满了（${mem.toFixed(0)}%）。现在最容易卡，请关掉占内存大的程序。` });
+      }
+
+      if (cDrive) {
+        if (cDrive.percent >= 90) {
+          findings.push({ level: "bad", title: "硬盘", text: `${cDrive.mount} 只剩 ${cDrive.free_h}，系统盘太满了。请清理文件或把资料挪到其他盘。` });
+        } else if (cDrive.percent >= 80) {
+          findings.push({ level: "warn", title: "硬盘", text: `${cDrive.mount} 已经用了 ${cDrive.percent}%，建议清理一下，避免更新失败、开机变慢。` });
+        } else {
+          findings.push({ level: "ok", title: "硬盘", text: `${cDrive.mount} 还剩 ${cDrive.free_h}，空间够用。` });
+        }
+      }
+
+      if (liveIfaces.length === 0) {
+        findings.push({ level: "bad", title: "网络", text: "没有检测到正在工作的网卡，现在可能上不了网。" });
+      } else if (busyNet) {
+        findings.push({ level: "warn", title: "网络", text: `正在大量传数据（下 ${data.network.recv_rate_h} / 上 ${data.network.sent_rate_h}），可能在下载、同步或更新。` });
+      } else {
+        const wifi = liveIfaces.find((n) => /wlan|wi-?fi|无线/i.test(n.name));
+        findings.push({ level: "ok", title: "网络", text: wifi ? `无线网已连接（${wifi.ipv4 || "已联网"}），网速正常。` : `网络已连接（${liveIfaces[0].ipv4 || liveIfaces[0].name}）。` });
+      }
+
+      if (hotProc && (cpuLv !== "ok" || memLv !== "ok")) {
+        const closeHint = SYSTEM_PROCS.has(hotProc.name) ? "这是系统程序，一般不用关。" : "不用的话可以先关掉它。";
+        findings.push({
+          level: "warn",
+          title: "占资源的程序",
+          text: `${aliasOf(hotProc.name)} 比较显眼：处理器 ${hotProc.cpu.toFixed(0)}%，内存 ${hotProc.rss_h}。${closeHint}`,
+        });
+      } else if (busyProc && memLv !== "ok") {
+        findings.push({
+          level: "ok",
+          title: "占资源的程序",
+          text: `内存大户是 ${aliasOf(busyProc.name)}，占了 ${busyProc.rss_h}。`,
+        });
+      }
+
+      if (bat && !bat.plugged && bat.percent <= 25) {
+        findings.push({
+          level: batLv,
+          title: "电池",
+          text: `电池还剩 ${bat.percent.toFixed(0)}%，而且没插电。电量低时电脑会变慢，建议充电。`,
+        });
+      }
+
+      const overall = worst([cpuLv, memLv, diskLv, netLv, batLv]);
+      let title = "状态良好";
+      let summary = "没有明显问题，可以放心用。下面每项都有白话说明。";
+      if (overall === "warn") {
+        title = "需要留意";
+        const reasons = [];
+        if (memLv === "warn") reasons.push("内存已经偏紧");
+        if (cpuLv === "warn") reasons.push("处理器比较忙");
+        if (diskLv === "warn") reasons.push("硬盘开始偏满");
+        if (netLv === "warn") reasons.push("网络正在大量传数据");
+        if (batLv === "warn") reasons.push("电池电量偏低");
+        summary = (reasons.join("，") || "有几项开始偏高") + "。优先看橙色那几条，现在还能用。";
+      } else if (overall === "bad") {
+        title = "有问题";
+        const reasons = [];
+        if (memLv === "bad") reasons.push("内存快满了，容易卡");
+        if (cpuLv === "bad") reasons.push("处理器几乎满载");
+        if (diskLv === "bad") reasons.push("系统盘空间不够");
+        if (netLv === "bad") reasons.push("网络可能没连上");
+        if (batLv === "bad") reasons.push("电池电量很低");
+        summary = (reasons.join("；") || "有项目需要马上处理") + "。先看红色那几条。";
+      }
+
+      return { overall, title, summary, findings: findings.slice(0, 5), cpuLv, memLv, diskLv, netLv };
+    }
+
+    function cpuHint(p) {
+      if (p < 20) return `处理器现在很闲，只用了 ${p.toFixed(0)}%。看电影、上网、写文档都足够。`;
+      if (p < 55) return `处理器中等忙碌（${p.toFixed(0)}%）。开几个软件没问题，如果风扇开始响，属于正常。`;
+      if (p < 85) return `处理器比较忙（${p.toFixed(0)}%）。电脑可能发热、风扇大声。先关掉暂时不用的软件。`;
+      return `处理器几乎满载（${p.toFixed(0)}%）。这时候最容易卡死，建议马上关掉占资源的程序。`;
+    }
+
+    function memHint(data) {
+      const p = data.memory.percent;
+      if (p < 60) return `内存还宽裕：已用 ${data.memory.used_h}，还能再开软件。`;
+      if (p < 75) return `内存已经用了大半（${p.toFixed(0)}%）。浏览器标签页开太多时，这里会先涨上去。`;
+      if (p < 90) return `内存偏紧（${p.toFixed(0)}%）。再开大型软件可能明显变慢，建议先关几个程序。`;
+      return `内存快满了。Windows 会开始用硬盘当临时内存，整台电脑都会变卡。`;
+    }
+
+    function diskHint(data) {
+      const vols = data.disk.volumes || [];
+      const c = vols.find((v) => /^[Cc]:\\?$/.test(v.mount));
+      if (c && c.percent >= 90) return `系统盘 ${c.mount} 只剩 ${c.free_h}，这是最需要处理的问题：清理下载、清空回收站，或把视频/安装包挪到 D 盘。`;
+      if (c && c.percent >= 80) return `系统盘 ${c.mount} 用了 ${c.percent}%，开始偏满。建议至少再腾出十几 GB。`;
+      return `所有硬盘合计用了 ${data.disk.percent.toFixed(0)}%。C 盘是系统盘，D 盘更适合放电影、资料。`;
+    }
+
+    function netHint(data, liveIfaces, busyNet) {
+      if (!liveIfaces.length) return "没有正在工作的网卡。请检查 Wi-Fi 有没有连上，或网线有没有插好。";
+      if (busyNet) return `正在较快传数据：下载 ${data.network.recv_rate_h}，上传 ${data.network.sent_rate_h}。如果不是你在下东西，可能是网盘/系统在后台更新。`;
+      return `网络是通的。下载 ${data.network.recv_rate_h}，上传 ${data.network.sent_rate_h}，现在比较安静。`;
+    }
+
+    function render(data) {
+      const h = data.host;
+      const dx = diagnose(data);
+      const liveIfaces = (data.network.interfaces || []).filter((n) => n.isup && !/loopback/i.test(n.name));
+      const busyNet = (data.network.recv_rate || 0) + (data.network.sent_rate || 0) > 2 * 1024 * 1024;
+
+      $("hostname").textContent = `${h.hostname}  ·  ${h.os}`;
+      $("verdict").className = "verdict " + dx.overall;
+      $("verdictTitle").textContent = dx.title;
+      $("verdictSummary").textContent = dx.summary;
+      $("findings").innerHTML = dx.findings.map((f) => `
+        <div class="finding ${f.level}">
+          <b>${f.title}</b>
+          <span>${f.text}</span>
+        </div>`).join("");
+
+      const batText = data.battery
+        ? `${data.battery.percent.toFixed(0)}% ${data.battery.plugged ? "正在充电" : "用电池"}`
+        : "台式机 / 已插电";
+      $("chips").innerHTML = [
+        chip("电脑名", h.hostname),
+        chip("处理器", h.cpu_brand.replace(/\s+/g, " ").trim()),
+        chip("已开机", h.uptime),
+        chip("正在运行的程序", data.processes.count + " 个"),
+        chip("电源", batText),
+      ].join("");
+
+      renderGauge($("cpuGauge"), data.cpu.percent, "正在使用", dx.cpuLv);
+      renderGauge($("memGauge"), data.memory.percent, "已经占用", dx.memLv);
+      renderGauge($("diskGauge"), data.disk.percent, "已经占用", dx.diskLv);
+      setPill($("cpuPill"), dx.cpuLv);
+      setPill($("memPill"), dx.memLv);
+      setPill($("diskPill"), dx.diskLv);
+      setPill($("netPill"), dx.netLv);
+      setCardLevel($("cpuCard"), dx.cpuLv);
+      setCardLevel($("memCard"), dx.memLv);
+      setCardLevel($("diskCard"), dx.diskLv);
+      setCardLevel($("netCard"), dx.netLv);
+
+      const freq = data.cpu.freq_current ? `${(data.cpu.freq_current / 1000).toFixed(2)} GHz` : "—";
+      $("cpuMeta").innerHTML = `
+        <div>这是什么<b>电脑的大脑，负责运算</b></div>
+        <div>当前速度<b>${freq}</b></div>
+        <div>核心数量<b>${h.cpu_physical} 个物理核 / ${h.cpu_logical} 个逻辑核</b></div>
+        <div>怎么看<b>低于 50% 很轻松，超过 85% 容易卡</b></div>`;
+      $("cpuHint").innerHTML = cpuHint(data.cpu.percent);
+
+      $("memMeta").innerHTML = `
+        <div>已经占用<b>${data.memory.used_h}</b></div>
+        <div>还能用<b>${data.memory.available_h}</b></div>
+        <div>总共有<b>${data.memory.total_h}</b></div>
+        <div>应急备用（交换分区）<b>${data.memory.swap_percent.toFixed(0)}% · ${data.memory.swap_used_h}</b></div>`;
+      $("memHint").innerHTML = memHint(data);
+
+      $("diskMeta").innerHTML = `
+        <div>已经存了<b>${data.disk.used_h}</b></div>
+        <div>还剩<b>${data.disk.free_h}</b></div>
+        <div>硬盘总共<b>${data.disk.total_h}</b></div>
+        <div>此刻读写速度<b>读 ${data.disk.io.read_rate_h} · 写 ${data.disk.io.write_rate_h}</b></div>`;
+      $("diskHint").innerHTML = diskHint(data);
+      $("netHint").innerHTML = netHint(data, liveIfaces, busyNet);
+
+      $("coreNote").textContent = `${h.cpu_logical} 个逻辑核心`;
+      $("cores").innerHTML = data.cpu.per_core.map((p, i) => `
+        <div class="core">
+          <span>核心 ${String(i + 1).padStart(2, "0")}</span>
+          <div class="bar-track"><div class="bar-fill" style="width:${p}%;background:${tone(levelOf(p, 65, 90))}"></div></div>
+          <b>${p.toFixed(0)}%</b>
+        </div>`).join("");
+
+      $("recvRate").textContent = data.network.recv_rate_h;
+      $("sentRate").textContent = data.network.sent_rate_h;
+      $("recvTotal").textContent = data.network.recv_h;
+      $("sentTotal").textContent = data.network.sent_h;
+      $("diskIo").textContent = `此刻：读 ${data.disk.io.read_rate_h}，写 ${data.disk.io.write_rate_h}`;
+
+      $("ifaces").innerHTML = data.network.interfaces.slice(0, 6).map((n) => `
+        <div class="iface">
+          <div>
+            <b>${ifaceLabel(n.name)}</b>
+            <div>${n.ipv4 || n.ipv6 || "没有地址"}</div>
+          </div>
+          <span class="${n.isup ? "up-pill" : "down-pill"}">${n.isup ? "已连接" : "未使用"}${n.speed && n.isup ? " · " + n.speed + " Mbps" : ""}</span>
+        </div>`).join("") || `<div class="iface">没有发现网卡</div>`;
+
+      $("volumes").innerHTML = data.disk.volumes.map((v) => {
+        const lv = v.percent >= 90 ? "alert" : v.percent >= 80 ? "caution" : "";
+        const note = v.percent >= 90 ? "空间告急，请清理" : v.percent >= 80 ? "开始偏满" : "空间够用";
+        const kind = /^[Cc]:\\?$/.test(v.mount) ? "系统盘" : "资料盘";
+        return `
+        <div class="vol ${lv}">
+          <div class="vol-h">
+            <span><b>${v.mount}</b> · ${kind}</span>
+            <span>${v.used_h} / ${v.total_h} · ${v.percent}% · ${note}</span>
+          </div>
+          <div class="vol-track"><div class="vol-fill" style="width:${v.percent}%"></div></div>
+        </div>`;
+      }).join("") || "<div class='vol-h'>没有可读取的磁盘</div>";
+
+      $("procCount").textContent = `一共 ${data.processes.count} 个程序在运行`;
+      $("procs").innerHTML = data.processes.top.map((p) => {
+        const hot = p.cpu >= 20 || p.mem >= 12;
+        return `
+        <tr class="${hot ? "hot" : ""}">
+          <td>${p.pid}</td>
+          <td class="name" title="${p.name}">
+            <span class="alias">${aliasOf(p.name)}</span>
+            <span class="raw">${p.name}</span>
+          </td>
+          <td>${p.cpu.toFixed(1)}%</td>
+          <td>${p.mem.toFixed(1)}%</td>
+          <td>${p.rss_h}</td>
+        </tr>`;
+      }).join("");
+
+      push(cpuHist, data.cpu.percent);
+      push(downHist, data.network.recv_rate);
+      push(upHist, data.network.sent_rate);
+      drawSpark($("cpuSpark"), [cpuHist], ["#3ee0d4"]);
+      drawSpark($("netSpark"), [downHist, upHist], ["#3ee0d4", "#f5a524"]);
+    }
+
+    async function tick() {
+      if (paused) return;
+      if (inflight) inflight.abort();
+      const ctrl = new AbortController();
+      inflight = ctrl;
+      try {
+        const res = await fetch("/api/stats", { cache: "no-store", signal: ctrl.signal });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const data = await res.json();
+        if (!data || !data.host) throw new Error("empty");
+        render(data);
+        $("liveDot").classList.remove("off");
+        $("liveText").textContent = "正在实时更新";
+        $("errBox").classList.remove("show");
+      } catch (err) {
+        if (err && err.name === "AbortError") return;
+        $("liveDot").classList.add("off");
+        $("liveText").textContent = "没有连上";
+        $("errBox").textContent = "读不到电脑状态。请双击「启动监控.bat」，或在这个文件夹运行 python server.py，然后再打开本页。";
+        $("errBox").classList.add("show");
+      } finally {
+        if (inflight === ctrl) inflight = null;
+      }
+    }
+
+    function loop() {
+      clearInterval(timer);
+      tick();
+      timer = setInterval(tick, interval);
+    }
+
+    $("pauseBtn").addEventListener("click", () => {
+      paused = !paused;
+      $("pauseBtn").textContent = paused ? "继续刷新" : "暂停刷新";
+      $("pauseBtn").setAttribute("aria-pressed", String(paused));
+      $("liveText").textContent = paused ? "已暂停" : "正在实时更新";
+      if (!paused) tick();
+    });
+
+    document.querySelectorAll("[data-interval]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("[data-interval]").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        interval = Number(btn.dataset.interval);
+        loop();
+      });
+    });
+
+    window.addEventListener("resize", () => {
+      drawSpark($("cpuSpark"), [cpuHist], ["#3ee0d4"]);
+      drawSpark($("netSpark"), [downHist, upHist], ["#3ee0d4", "#f5a524"]);
+    });
+
+    setClock();
+    setInterval(setClock, 1000);
+    loop();
+  </script>
+</body>
+</html>
