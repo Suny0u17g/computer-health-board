@@ -208,7 +208,7 @@
 
     .gauges {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 16px;
       margin-bottom: 16px;
     }
@@ -484,6 +484,10 @@
       text-align: center;
     }
 
+    @media (max-width: 1400px) {
+      .gauges { grid-template-columns: repeat(2, 1fr); }
+    }
+
     @media (max-width: 1024px) {
       header.top, .verdict { grid-template-columns: 1fr; }
       .verdict-score { border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 12px; }
@@ -567,6 +571,17 @@
           <div class="meta" id="diskMeta"></div>
         </div>
         <p class="hint" id="diskHint">硬盘是长期仓库。系统盘太满时，更新、开机都会变慢。</p>
+      </article>
+      <article class="card" id="gpuCard">
+        <div class="card-h">
+          <h2>显卡忙不忙</h2>
+          <span class="pill ok" id="gpuPill">正常</span>
+        </div>
+        <div class="gauge-row">
+          <div class="gauge" id="gpuGauge"></div>
+          <div class="meta" id="gpuMeta"></div>
+        </div>
+        <p class="hint" id="gpuHint">显卡负责画面。看视频、开会、游戏时这里会升高，风扇也可能变响。</p>
       </article>
     </section>
 
@@ -836,6 +851,9 @@
     }
 
     function diagnose(data) {
+      if (data.health && data.health.title) {
+        return data.health;
+      }
       const cpu = data.cpu.percent;
       const mem = data.memory.percent;
       const swap = data.memory.swap_percent;
@@ -941,7 +959,7 @@
         summary = (reasons.join("；") || "有项目需要马上处理") + "。先看红色那几条。";
       }
 
-      return { overall, title, summary, findings: findings.slice(0, 5), cpuLv, memLv, diskLv, netLv };
+      return { overall, title, summary, findings: findings.slice(0, 6), cpuLv, memLv, diskLv, netLv, gpuLv: "ok" };
     }
 
     function cpuHint(p) {
@@ -965,6 +983,19 @@
       if (c && c.percent >= 90) return `系统盘 ${c.mount} 只剩 ${c.free_h}，这是最需要处理的问题：清理下载、清空回收站，或把视频/安装包挪到 D 盘。`;
       if (c && c.percent >= 80) return `系统盘 ${c.mount} 用了 ${c.percent}%，开始偏满。建议至少再腾出十几 GB。`;
       return `所有硬盘合计用了 ${data.disk.percent.toFixed(0)}%。C 盘是系统盘，D 盘更适合放电影、资料。`;
+    }
+
+    function gpuHint(gpu) {
+      if (!gpu || !gpu.available || gpu.percent == null) {
+        return gpu && gpu.name
+          ? `检测到 ${gpu.name}。暂时读不到实时占用，只显示名字。`
+          : "这台电脑暂时读不到显卡占用。";
+      }
+      const p = gpu.percent;
+      if (p < 20) return `${gpu.name} 现在很闲，只用了 ${p.toFixed(0)}%。`;
+      if (p < 70) return `${gpu.name} 中等忙碌（${p.toFixed(0)}%）。看视频或开会时这样很正常。`;
+      if (p < 90) return `显卡比较忙（${p.toFixed(0)}%）。风扇可能变响，先别再开大型游戏或剪辑。`;
+      return `显卡几乎满载（${p.toFixed(0)}%）。如果不是在玩游戏或剪视频，可能有程序在后台占显卡。`;
     }
 
     function netHint(data, liveIfaces, busyNet) {
@@ -995,6 +1026,7 @@
       $("chips").innerHTML = [
         chip("电脑名", h.hostname),
         chip("处理器", h.cpu_brand.replace(/\s+/g, " ").trim()),
+        chip("显卡", (data.gpu && data.gpu.name) || "—"),
         chip("已开机", h.uptime),
         chip("正在运行的程序", data.processes.count + " 个"),
         chip("电源", batText),
@@ -1003,14 +1035,19 @@
       renderGauge($("cpuGauge"), data.cpu.percent, "正在使用", dx.cpuLv);
       renderGauge($("memGauge"), data.memory.percent, "已经占用", dx.memLv);
       renderGauge($("diskGauge"), data.disk.percent, "已经占用", dx.diskLv);
+      const gpuPct = data.gpu && data.gpu.percent != null ? data.gpu.percent : 0;
+      const gpuLv = dx.gpuLv || "ok";
+      renderGauge($("gpuGauge"), gpuPct, data.gpu && data.gpu.available ? "正在使用" : "暂无占用", gpuLv);
       setPill($("cpuPill"), dx.cpuLv);
       setPill($("memPill"), dx.memLv);
       setPill($("diskPill"), dx.diskLv);
       setPill($("netPill"), dx.netLv);
+      setPill($("gpuPill"), gpuLv);
       setCardLevel($("cpuCard"), dx.cpuLv);
       setCardLevel($("memCard"), dx.memLv);
       setCardLevel($("diskCard"), dx.diskLv);
       setCardLevel($("netCard"), dx.netLv);
+      setCardLevel($("gpuCard"), gpuLv);
 
       const freq = data.cpu.freq_current ? `${(data.cpu.freq_current / 1000).toFixed(2)} GHz` : "—";
       $("cpuMeta").innerHTML = `
@@ -1033,6 +1070,12 @@
         <div>硬盘总共<b>${data.disk.total_h}</b></div>
         <div>此刻读写速度<b>读 ${data.disk.io.read_rate_h} · 写 ${data.disk.io.write_rate_h}</b></div>`;
       $("diskHint").innerHTML = diskHint(data);
+      $("gpuMeta").innerHTML = `
+        <div>这是什么<b>负责画面的芯片</b></div>
+        <div>型号<b>${(data.gpu && data.gpu.name) || "—"}</b></div>
+        <div>显存<b>${(data.gpu && data.gpu.memory_total_h) || "核显共享内存"}</b></div>
+        <div>怎么看<b>看视频升高正常，长期 90% 以上才要留意</b></div>`;
+      $("gpuHint").innerHTML = gpuHint(data.gpu);
       $("netHint").innerHTML = netHint(data, liveIfaces, busyNet);
 
       $("coreNote").textContent = `${h.cpu_logical} 个逻辑核心`;

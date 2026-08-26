@@ -6,6 +6,7 @@ from __future__ import annotations
 import ctypes
 import sys
 import threading
+import time
 import urllib.request
 import webbrowser
 from pathlib import Path
@@ -13,16 +14,25 @@ from pathlib import Path
 import pystray
 from PIL import Image, ImageDraw
 
+import overlay
 import server
 
 APP_NAME = "电脑健康看板"
 MUTEX_NAME = "Global\\MachinePulseHealthBoard"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 ERROR_ALREADY_EXISTS = 183
+ALERT_COOLDOWN_SEC = 30 * 60
+ALERT_HOLD_SEC = 20
 
 _httpd = None
 _url = "http://127.0.0.1:8765/"
 _mutex = None
+_icon: pystray.Icon | None = None
+_overlay: overlay.MiniOverlay | None = None
+_notify_enabled = True
+_last_alert_at: dict[str, float] = {}
+_alert_seen_since: dict[str, float] = {}
+_watch_stop = threading.Event()
 
 
 def frozen() -> bool:
@@ -37,13 +47,17 @@ def exe_path() -> str:
 
 def find_running_url() -> str | None:
     for port in range(8765, 8780):
-        url = f"http://127.0.0.1:{port}/"
+        url = f"http://{host_port(port)}/"
         try:
             urllib.request.urlopen(url + "api/stats", timeout=0.4)
             return url
         except Exception:
             continue
     return None
+
+
+def host_port(port: int) -> str:
+    return f"127.0.0.1:{port}"
 
 
 def acquire_mutex() -> bool:
@@ -100,20 +114,88 @@ def make_icon_image() -> Image.Image:
     return img
 
 
+def notify(title: str, text: str) -> None:
+    icon = _icon
+    if icon is None:
+        return
+    try:
+        icon.notify(text, title)
+    except Exception:
+        pass
+
+
+def watch_alerts() -> None:
+    while not _watch_stop.is_set():
+        time.sleep(5)
+        if not _notify_enabled:
+            continue
+        data = server.current_snapshot() or {}
+        health = data.get("health") or {}
+        alerts = health.get("alerts") or []
+        now = time.time()
+        active_ids = {a.get("id") for a in alerts if a.get("id")}
+        for key in list(_alert_seen_since):
+            if key not in active_ids:
+                _alert_seen_since.pop(key, None)
+
+        for alert in alerts:
+            aid = str(alert.get("id") or "")
+            if not aid:
+                continue
+            first = _alert_seen_since.get(aid)
+            if first is None:
+                _alert_seen_since[aid] = now
+                continue
+            if now - first < ALERT_HOLD_SEC:
+                continue
+            last = _last_alert_at.get(aid, 0)
+            if now - last < ALERT_COOLDOWN_SEC:
+                continue
+            _last_alert_at[aid] = now
+            notify(str(alert.get("title") or "电脑需要留意"), str(alert.get("text") or health.get("summary") or ""))
+
+
 def on_quit(icon: pystray.Icon, _item=None) -> None:
+    _watch_stop.set()
+    if _overlay is not None:
+        _overlay.stop()
     icon.visible = False
     icon.stop()
     if _httpd is not None:
         threading.Thread(target=server.stop_server, args=(_httpd,), daemon=True).start()
 
 
+def rebuild_menu(icon: pystray.Icon) -> None:
+    icon.menu = build_menu(icon)
+
+
 def build_menu(icon: pystray.Icon) -> pystray.Menu:
-    def toggle_autostart(icon2: pystray.Icon, item: pystray.MenuItem) -> None:
+    def toggle_autostart(icon2: pystray.Icon, _item=None) -> None:
         set_autostart(not autostart_enabled())
-        icon2.menu = build_menu(icon2)
+        rebuild_menu(icon2)
+
+    def toggle_overlay(icon2: pystray.Icon, _item=None) -> None:
+        if _overlay is not None:
+            _overlay.toggle()
+        rebuild_menu(icon2)
+
+    def toggle_notify(icon2: pystray.Icon, _item=None) -> None:
+        global _notify_enabled
+        _notify_enabled = not _notify_enabled
+        rebuild_menu(icon2)
 
     items = [
         pystray.MenuItem("打开健康看板", lambda *_: open_board(), default=True),
+        pystray.MenuItem(
+            "显示迷你悬浮窗",
+            toggle_overlay,
+            checked=lambda _: bool(_overlay and _overlay.visible()),
+        ),
+        pystray.MenuItem(
+            "异常时弹出通知",
+            toggle_notify,
+            checked=lambda _: _notify_enabled,
+        ),
         pystray.Menu.SEPARATOR,
     ]
     if frozen():
@@ -130,11 +212,12 @@ def build_menu(icon: pystray.Icon) -> pystray.Menu:
 
 
 def run_tray() -> None:
-    icon = pystray.Icon(
-        APP_NAME,
-        make_icon_image(),
-        APP_NAME,
-    )
+    global _icon, _overlay
+    _overlay = overlay.MiniOverlay(lambda: open_board())
+    _overlay.start()
+    threading.Thread(target=watch_alerts, name="alert-watch", daemon=True).start()
+    icon = pystray.Icon(APP_NAME, make_icon_image(), APP_NAME)
+    _icon = icon
     icon.menu = build_menu(icon)
     icon.run()
 
